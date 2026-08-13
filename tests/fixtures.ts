@@ -1,0 +1,73 @@
+import { randomUUID } from "node:crypto";
+import { KitchenMapContentSchema, type KitchenMapContent } from "../src/schemas/kitchen-map.js";
+
+export function kitchenMapContent(overrides: Partial<KitchenMapContent> = {}): KitchenMapContent {
+  const memberId = randomUUID();
+  return KitchenMapContentSchema.parse({
+    status: "draft",
+    timezone: "America/Chicago",
+    currency: "USD",
+    weekdayPrepLimitMinutes: 30,
+    cookingSkill: "intermediate",
+    equipment: ["stove", "refrigerator"],
+    homemadePreference: "mostly_homemade",
+    batchPrepDay: "sunday",
+    childParticipationPreference: "flexible",
+    batchPlanning: {
+      batchPrepDay: "sunday",
+      batchPrepMinutes: 90,
+      freezerAvailable: true,
+      acceptableStorageDays: 3,
+    },
+    householdDiets: [],
+    preferredCuisines: ["Mexican"],
+    dislikedIngredients: [],
+    members: [
+      {
+        id: memberId,
+        displayName: "Student",
+        ageGroup: "child",
+        allergens: [],
+        diets: [],
+        likedCuisines: ["Mexican"],
+        likedIngredients: ["beans"],
+        dislikedIngredients: [],
+        texturePreferences: ["crunchy"],
+        spiceLevel: "mild",
+        schoolLunch: {
+          preparationPreference: "night_before",
+          morningPrepLimitMinutes: 10,
+          childCanAssembleAtSchool: false,
+          childCanOpenThermos: false,
+          childCanOpenContainers: true,
+          microwaveAvailable: false,
+          refrigeratorAvailable: false,
+          thermosAllowed: true,
+          icePackAvailable: true,
+          utensilsAllowed: true,
+          nutFreeFacility: true,
+          maximumEatingMinutes: 20,
+          schoolDays: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+          lunchPeriodStart: "11:30",
+          classroomOrSchoolFoodRules: ["No sharing"],
+          portionPreference: "medium",
+          appetitePattern: "variable",
+          preferredFoodFormats: ["bento", "wrap"],
+          foodsToKeepSeparate: ["sauce"],
+          containersAvailable: ["bento box", "thermos"],
+          breakSnacks: {
+            enabled: true,
+            breaks: [{ period: "morning", durationMinutes: 8 }],
+            mustBeIndividuallyPackaged: true,
+            shelfStableRequired: true,
+            utensilsAllowed: false,
+            preferredTypes: ["fruit", "savory"],
+            trustedProductIds: [],
+            weeklyBudget: 12,
+          },
+        },
+      },
+    ],
+    ...overrides,
+  });
+}
