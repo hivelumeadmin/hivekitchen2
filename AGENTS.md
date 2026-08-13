@@ -1,0 +1,24 @@
+# Homemade School-Lunch Agent engineering instructions
+
+- Use TypeScript only. Do not add Python.
+- Use strict TypeScript and Zod at every external boundary.
+- Use the OpenAI Responses API for new model interactions.
+- Keep OpenAI and Supabase privileged keys server-side.
+- Treat repositories and application tools as the source of truth; never use model memory as the household record.
+- Model one school day as a main lunch plus zero or more separate break snacks.
+- The homemade preference applies primarily to the main lunch. Break snacks may be store-bought.
+- Default planning uses three unique main preparations over five school days, normally A-B-A-C-B.
+- Default `maxOccurrencesPerMainItem` is 2. Respect household configuration and child-specific repetition tolerance.
+- Repeated meals require batch quantities, storage, freezing/thawing where appropriate, last acceptable serving date, and fresh-pack components.
+- Allergens, diets, cross-contact rules, and school restrictions are hard constraints.
+- Never implement allergen or storage-safety checking solely in prompts. Use deterministic TypeScript validation with unit tests.
+- Never claim a branded packaged snack is allergen-safe. Require current-label checking and verified catalog data.
+- The model may propose Kitchen Map changes; durable writes require explicit confirmation.
+- Allergy changes always require explicit adult confirmation.
+- Do not expose generic database or SQL tools to the model.
+- Every main lunch must include ingredients, equipment, numbered preparation, night-before steps, morning steps, packing, storage, and serving instructions.
+- Encourage optional family participation without shame, pressure, or moral language about food.
+- Add or update tests for every behavior change.
+- Run lint, typecheck, and tests before declaring work complete.
+- Preserve unrelated user changes.
+- Verify OpenAI API and SDK fields against the installed SDK and current official OpenAI documentation before use.
