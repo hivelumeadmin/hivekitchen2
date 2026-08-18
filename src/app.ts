@@ -5,7 +5,9 @@ import { MealPlannerAgent, openAiResponseCreator } from "./agents/meal-planner.j
 import type { AppConfig } from "./config.js";
 import { ConfirmationTokenService } from "./domain/confirmation-token.js";
 import { MemoryKitchenMapRepository } from "./repositories/memory-repository.js";
+import { MemoryWeeklyPlanRepository } from "./repositories/plan-repository.js";
 import { KitchenMapTools } from "./tools/kitchen-map-tools.js";
+import { PlanningTools } from "./tools/planning-tools.js";
 
 const ChatBodySchema = z
   .object({
@@ -23,6 +25,8 @@ export function buildApp(config: AppConfig) {
     repository,
     new ConfirmationTokenService(config.confirmationSecret),
   );
+  const plans = new MemoryWeeklyPlanRepository(repository);
+  const planningTools = new PlanningTools(repository, plans);
 
   app.get("/health", async () => ({ ok: true, service: "school-lunch-agent" }));
   app.post("/chat", async (request, reply) => {
@@ -37,8 +41,14 @@ export function buildApp(config: AppConfig) {
     }
     repository.addMembership(parsed.data.userId, parsed.data.householdId);
     const client = new OpenAI({ apiKey: config.openAiApiKey });
-    const agent = new MealPlannerAgent(openAiResponseCreator(client), tools, config.openAiModel);
+    const agent = new MealPlannerAgent(
+      openAiResponseCreator(client),
+      tools,
+      config.openAiModel,
+      8,
+      planningTools,
+    );
     return agent.run(parsed.data);
   });
-  return { app, repository, tools };
+  return { app, repository, tools, plans, planningTools };
 }

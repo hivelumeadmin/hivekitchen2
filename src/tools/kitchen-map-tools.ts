@@ -81,24 +81,30 @@ export class KitchenMapTools {
         );
       }
       const currentContent = current ? stripMetadata(current) : null;
-      const diff = diffJson(currentContent, args.proposedMap);
-      const proposedHasAllergies = args.proposedMap.members.some(
+      const proposedMap: KitchenMapContent = { ...args.proposedMap, status: "confirmed" };
+      const diff = diffJson(currentContent, proposedMap);
+      const proposedHasAllergies = proposedMap.members.some(
         (member) => member.allergens.length > 0,
       );
       const requiresAdultConfirmation = currentContent
-        ? hashJson(allergySnapshot(currentContent)) !== hashJson(allergySnapshot(args.proposedMap))
+        ? hashJson(allergySnapshot(currentContent)) !== hashJson(allergySnapshot(proposedMap))
         : proposedHasAllergies;
       const issued = this.confirmations.issue({
         userId: context.userId,
         householdId: context.householdId,
         profileVersion: args.baseVersion,
         diff,
-        proposedMap: args.proposedMap,
+        proposedMap,
         requiresAdultConfirmation,
       });
       return {
         ok: true,
-        data: { diff, ...issued, requiresAdultConfirmation, proposedMap: args.proposedMap },
+        data: {
+          diff,
+          expiresAt: issued.expiresAt,
+          requiresAdultConfirmation,
+          proposedMap,
+        },
       } as const;
     } catch (error) {
       return failure(error);
@@ -109,7 +115,8 @@ export class KitchenMapTools {
     try {
       const context = ToolContextSchema.parse(contextInput);
       const args = ConfirmKitchenMapUpdateArgumentsSchema.parse(argumentsInput);
-      const payload = this.confirmations.verify(args.confirmationToken);
+      const confirmationToken = this.confirmations.latestToken(context.userId, context.householdId);
+      const payload = this.confirmations.verify(confirmationToken);
       if (payload.userId !== context.userId || payload.householdId !== context.householdId) {
         return {
           ok: false,
@@ -143,10 +150,12 @@ export class KitchenMapTools {
         payload.profileVersion,
         {
           ...payload.proposedMap,
+          status: "confirmed",
           householdId: context.householdId,
           version: payload.profileVersion + 1,
         },
       );
+      this.confirmations.consume(payload.proposalId, context.userId, context.householdId);
       return { ok: true, data: { map: saved, appliedDiff: diff } } as const;
     } catch (error) {
       return failure(error);

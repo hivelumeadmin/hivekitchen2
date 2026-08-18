@@ -31,7 +31,7 @@ describe("scripted onboarding regressions", () => {
       if (!proposed.ok) continue;
       const confirmed = await tools.confirmKitchenMapUpdate(
         { userId, householdId },
-        { confirmationToken: proposed.data.token },
+        { explicitAdultConfirmation: false },
       );
       expect(confirmed.ok).toBe(true);
       if (confirmed.ok) expect(KitchenMapSchema.safeParse(confirmed.data.map).success).toBe(true);

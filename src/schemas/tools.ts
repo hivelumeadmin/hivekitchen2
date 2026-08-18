@@ -10,7 +10,6 @@ export const ProposeKitchenMapUpdateArgumentsSchema = z
   .strict();
 export const ConfirmKitchenMapUpdateArgumentsSchema = z
   .object({
-    confirmationToken: z.string().min(1),
     explicitAdultConfirmation: z.boolean().default(false),
   })
   .strict();

@@ -10,11 +10,20 @@ function setup(now: () => number = () => Date.now(), ttlMs = 600_000) {
   const householdId = randomUUID();
   const repository = new MemoryKitchenMapRepository();
   repository.addMembership(userId, householdId);
-  const tools = new KitchenMapTools(
-    repository,
-    new ConfirmationTokenService("a-test-secret-that-is-longer-than-thirty-two", ttlMs, now),
+  const confirmations = new ConfirmationTokenService(
+    "a-test-secret-that-is-longer-than-thirty-two",
+    ttlMs,
+    now,
   );
-  return { userId, householdId, repository, tools, context: { userId, householdId } };
+  const tools = new KitchenMapTools(repository, confirmations);
+  return {
+    userId,
+    householdId,
+    repository,
+    confirmations,
+    tools,
+    context: { userId, householdId },
+  };
 }
 
 async function propose(tools: KitchenMapTools, context: object, proposedMap = kitchenMapContent()) {
@@ -27,13 +36,14 @@ async function propose(tools: KitchenMapTools, context: object, proposedMap = ki
 describe("Kitchen Map tools", () => {
   it("onboards a new household and applies repetition defaults", async () => {
     const fixture = setup();
-    const proposal = await propose(fixture.tools, fixture.context);
+    await propose(fixture.tools, fixture.context);
     const result = await fixture.tools.confirmKitchenMapUpdate(fixture.context, {
-      confirmationToken: proposal.token,
+      explicitAdultConfirmation: false,
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.map.version).toBe(1);
+      expect(result.data.map.status).toBe("confirmed");
       expect(result.data.map.lunchRepetition.maxOccurrencesPerMainItem).toBe(2);
       expect(result.data.map.lunchRepetition.targetUniqueMainItemsPerWeek).toBe(3);
     }
@@ -61,13 +71,11 @@ describe("Kitchen Map tools", () => {
     const proposal = await propose(fixture.tools, fixture.context, map);
     expect(proposal.requiresAdultConfirmation).toBe(true);
     const denied = await fixture.tools.confirmKitchenMapUpdate(fixture.context, {
-      confirmationToken: proposal.token,
       explicitAdultConfirmation: false,
     });
     expect(denied).toMatchObject({ ok: false, code: "ADULT_CONFIRMATION_REQUIRED" });
     expect(await fixture.repository.get(fixture.userId, fixture.householdId)).toBeNull();
     const accepted = await fixture.tools.confirmKitchenMapUpdate(fixture.context, {
-      confirmationToken: proposal.token,
       explicitAdultConfirmation: true,
     });
     expect(accepted.ok).toBe(true);
@@ -76,50 +84,43 @@ describe("Kitchen Map tools", () => {
   it("rejects expired confirmation tokens", async () => {
     let time = 1_000;
     const fixture = setup(() => time, 10);
-    const proposal = await propose(fixture.tools, fixture.context);
+    await propose(fixture.tools, fixture.context);
     time = 1_011;
     const result = await fixture.tools.confirmKitchenMapUpdate(fixture.context, {
-      confirmationToken: proposal.token,
+      explicitAdultConfirmation: false,
     });
     expect(result).toMatchObject({ ok: false, code: "CONFIRMATION_EXPIRED" });
   });
 
   it("rejects stale profile versions", async () => {
     const fixture = setup();
-    const first = await propose(fixture.tools, fixture.context);
-    const second = await propose(
-      fixture.tools,
-      fixture.context,
-      kitchenMapContent({ cookingSkill: "advanced" }),
-    );
-    expect(
-      (
-        await fixture.tools.confirmKitchenMapUpdate(fixture.context, {
-          confirmationToken: first.token,
-        })
-      ).ok,
-    ).toBe(true);
+    await propose(fixture.tools, fixture.context, kitchenMapContent({ cookingSkill: "advanced" }));
+    await fixture.repository.save(fixture.userId, fixture.householdId, 0, {
+      ...kitchenMapContent({ cookingSkill: "beginner" }),
+      householdId: fixture.householdId,
+      version: 1,
+    });
     const stale = await fixture.tools.confirmKitchenMapUpdate(fixture.context, {
-      confirmationToken: second.token,
+      explicitAdultConfirmation: false,
     });
     expect(stale).toMatchObject({ ok: false, code: "STALE_VERSION" });
   });
 
   it("binds confirmations to the exact user and household", async () => {
     const fixture = setup();
-    const proposal = await propose(fixture.tools, fixture.context);
+    await propose(fixture.tools, fixture.context);
     const result = await fixture.tools.confirmKitchenMapUpdate(
       { userId: randomUUID(), householdId: fixture.householdId },
-      { confirmationToken: proposal.token },
+      { explicitAdultConfirmation: false },
     );
-    expect(result).toMatchObject({ ok: false, code: "CONFIRMATION_SCOPE_MISMATCH" });
+    expect(result).toMatchObject({ ok: false, code: "INVALID_CONFIRMATION" });
   });
 
   it("preserves a separate short-break snack configuration", async () => {
     const fixture = setup();
-    const proposal = await propose(fixture.tools, fixture.context);
+    await propose(fixture.tools, fixture.context);
     const result = await fixture.tools.confirmKitchenMapUpdate(fixture.context, {
-      confirmationToken: proposal.token,
+      explicitAdultConfirmation: false,
     });
     expect(result.ok && result.data.map.members[0]?.schoolLunch.breakSnacks).toMatchObject({
       enabled: true,
@@ -128,6 +129,52 @@ describe("Kitchen Map tools", () => {
       utensilsAllowed: false,
       breaks: [{ period: "morning", durationMinutes: 8 }],
     });
+  });
+
+  it("uses a compact confirmation token even for a large Kitchen Map", async () => {
+    const fixture = setup();
+    const map = kitchenMapContent({
+      preferredCuisines: Array.from({ length: 100 }, (_, index) => `Cuisine ${index}`),
+      equipment: Array.from({ length: 100 }, (_, index) => `Equipment ${index}`),
+    });
+    const proposal = await propose(fixture.tools, fixture.context, map);
+    expect(proposal).not.toHaveProperty("token");
+    expect(
+      fixture.confirmations.latestToken(fixture.userId, fixture.householdId).length,
+    ).toBeLessThan(600);
+    const result = await fixture.tools.confirmKitchenMapUpdate(fixture.context, {
+      explicitAdultConfirmation: false,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("confirms the latest scoped proposal without requiring the model to echo its token", async () => {
+    const fixture = setup();
+    await propose(fixture.tools, fixture.context);
+    const result = await fixture.tools.confirmKitchenMapUpdate(fixture.context, {
+      explicitAdultConfirmation: false,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("does not resolve another household's pending token", async () => {
+    const fixture = setup();
+    await propose(fixture.tools, fixture.context);
+    const result = await fixture.tools.confirmKitchenMapUpdate(
+      { userId: fixture.userId, householdId: randomUUID() },
+      { explicitAdultConfirmation: false },
+    );
+    expect(result).toMatchObject({ ok: false, code: "INVALID_CONFIRMATION" });
+  });
+
+  it("rejects a client-supplied confirmation token", async () => {
+    const fixture = setup();
+    await propose(fixture.tools, fixture.context);
+    const result = await fixture.tools.confirmKitchenMapUpdate(fixture.context, {
+      explicitAdultConfirmation: false,
+      confirmationToken: fixture.confirmations.latestToken(fixture.userId, fixture.householdId),
+    });
+    expect(result).toMatchObject({ ok: false, code: "INVALID_ARGUMENTS" });
   });
 
   it("rejects invalid arguments", async () => {

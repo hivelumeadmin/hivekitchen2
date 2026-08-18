@@ -1,8 +1,18 @@
-# Homemade School-Lunch Agent — Layers 0 and 1
+# Homemade School-Lunch Agent — Layers 0–3
 
 A strict TypeScript/Node.js prototype for collecting and confirming a household Kitchen Map. It includes an in-memory, versioned repository; household authorization; Zod-validated tool boundaries; signed expiring confirmations; a Fastify health/chat harness; and an OpenAI Responses API tool loop.
 
-This repository intentionally stops after Layer 1. It does not include recipes, weekly plan generation, Supabase, or production deployment.
+Layer 2 adds 20 curated main-lunch fixtures, eight catalog-verified snack fixtures, and pure deterministic TypeScript validation for allergens, cross-contact, diets, school rules, equipment, storage, freezing/thawing, reheating, packing, containers, eating time, and short-break package constraints. It does not include weekly plan generation, Supabase, or production deployment.
+
+Validation never calls OpenAI. Branded snack records are schema-invalid unless they require a current package-label check, and successful branded-snack validation still returns that adult-check caution.
+
+Layer 3 adds authorized recipe and verified-snack search, deterministic five-school-day planning, whole-plan validation, meal replacement with at most two automatic repairs, batch-prep details for every repeated main, and deterministic shopping-list aggregation. The default cadence is A-B-A-C-B with three unique mains and no item occurring more than twice. Main lunches and break snacks remain separate plan elements. Supabase and production deployment remain out of scope.
+
+Run Layer 3's focused regression suite with:
+
+```powershell
+npm.cmd test -- tests/weekly-plan.test.ts tests/planning-tools.test.ts
+```
 
 ## Requirements
 

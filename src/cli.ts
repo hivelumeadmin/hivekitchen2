@@ -5,7 +5,10 @@ import { MealPlannerAgent, openAiResponseCreator } from "./agents/meal-planner.j
 import { loadConfig } from "./config.js";
 import { ConfirmationTokenService } from "./domain/confirmation-token.js";
 import { MemoryKitchenMapRepository } from "./repositories/memory-repository.js";
+import { MemoryWeeklyPlanRepository } from "./repositories/plan-repository.js";
 import { KitchenMapTools } from "./tools/kitchen-map-tools.js";
+import { PlanningTools } from "./tools/planning-tools.js";
+import { normalizeCliMessage } from "./cli-input.js";
 
 const config = loadConfig();
 if (!config.openAiApiKey) throw new Error("Set OPENAI_API_KEY to use the chat CLI");
@@ -22,17 +25,21 @@ const tools = new KitchenMapTools(
   repository,
   new ConfirmationTokenService(config.confirmationSecret),
 );
+const planningTools = new PlanningTools(repository, new MemoryWeeklyPlanRepository(repository));
 const agent = new MealPlannerAgent(
   openAiResponseCreator(new OpenAI({ apiKey })),
   tools,
   config.openAiModel,
+  8,
+  planningTools,
 );
 const terminal = createInterface({ input: stdin, output: stdout });
 let previousResponseId: string | undefined;
 stdout.write("School Lunch Kitchen Map (type 'exit' to quit)\n");
 for (;;) {
-  const message = await terminal.question("> ");
-  if (message.trim().toLowerCase() === "exit") break;
+  const message = normalizeCliMessage(await terminal.question("> "));
+  if (message === null) continue;
+  if (message.toLowerCase() === "exit") break;
   const result = await agent.run({
     userId,
     householdId,
